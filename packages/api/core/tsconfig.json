@@ -1,8 +1,0 @@
-{
-  "extends": "@repo/config/typescript/library",
-  "include": ["."],
-  "exclude": ["node_modules"],
-  "compilerOptions": {
-    "strictNullChecks": true
-  }
-}

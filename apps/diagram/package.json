@@ -10,11 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@repo/api-core": "workspace:*",
+    "@repo/backend": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.162.4",
     "@tanstack/react-router-devtools": "^1.162.4",
+    "@tanstack/react-router-ssr-query": "^1.162.9",
     "@trpc/client": "^11.10.0",
     "@trpc/tanstack-react-query": "^11.10.0",
     "react": "^19.2.0",
