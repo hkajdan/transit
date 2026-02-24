@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@convex-dev/react-query": "^0.1.0",
     "@repo/backend": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
@@ -18,12 +19,14 @@
     "@tanstack/react-router-ssr-query": "^1.162.9",
     "@trpc/client": "^11.10.0",
     "@trpc/tanstack-react-query": "^11.10.0",
+    "convex": "^1.32.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.5"
   },
   "devDependencies": {
     "@repo/config": "workspace:*",
+    "@repo/backend": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/router-plugin": "^1.162.4",
     "@types/node": "^24.10.1",

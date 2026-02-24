@@ -20,6 +20,9 @@ importers:
 
   apps/diagram:
     dependencies:
+      '@convex-dev/react-query':
+        specifier: ^0.1.0
+        version: 0.1.0(@tanstack/react-query@5.90.21(react@19.2.0))(convex@1.32.0(react@19.2.0))
       '@repo/backend':
         specifier: workspace:*
         version: link:../../packages/backend
@@ -44,6 +47,9 @@ importers:
       '@trpc/tanstack-react-query':
         specifier: ^11.10.0
         version: 11.10.0(@tanstack/react-query@5.90.21(react@19.2.0))(@trpc/client@11.10.0(@trpc/server@11.10.0(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.10.0(typescript@5.9.3))(react@19.2.0)(typescript@5.9.3)
+      convex:
+        specifier: ^1.32.0
+        version: 1.32.0(react@19.2.0)
       react:
         specifier: ^19.2.0
         version: 19.2.0
@@ -203,6 +209,12 @@ packages:
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
+
+  '@convex-dev/react-query@0.1.0':
+    resolution: {integrity: sha512-ULmBZCtAQDUePdBhUv7hj1Yy4QiCelhi6uEIOtMpjW8db6W9CFKvQwLt9heLngccFyMFfAZdOfSrT+cP4AH0Jw==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.0.0
+      convex: ^1.29.3
 
   '@emnapi/core@1.8.1':
     resolution: {integrity: sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg==}
@@ -1853,6 +1865,11 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
+
+  '@convex-dev/react-query@0.1.0(@tanstack/react-query@5.90.21(react@19.2.0))(convex@1.32.0(react@19.2.0))':
+    dependencies:
+      '@tanstack/react-query': 5.90.21(react@19.2.0)
+      convex: 1.32.0(react@19.2.0)
 
   '@emnapi/core@1.8.1':
     dependencies:

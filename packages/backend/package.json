@@ -1,7 +1,11 @@
 {
   "name": "@repo/backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
+  "exports": {
+    "./api": "./convex/_generated/api.js"
+  },
   "scripts": {
     "dev": "convex dev",
     "setup": "convex dev --until-success"
