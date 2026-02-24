@@ -1,5 +1,5 @@
 {
-  "name": "map",
+  "name": "diagram",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,13 +10,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@repo/api-core": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.162.4",
     "@tanstack/react-router-devtools": "^1.162.4",
+    "@trpc/client": "^11.10.0",
+    "@trpc/tanstack-react-query": "^11.10.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.5"
   },
   "devDependencies": {
+    "@repo/config": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/router-plugin": "^1.162.4",
     "@types/node": "^24.10.1",

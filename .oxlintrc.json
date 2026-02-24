@@ -4,6 +4,7 @@
   "rules": {
     "typescript/no-floating-promises": "error"
   },
+  "jsPlugins": ["@tanstack/eslint-plugin-query"],
   "settings": {
     "jsx-a11y": {
       "polymorphicPropName": null,

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@source "./components";
+
+@theme {
+  --color-blue-1000: #73b9a8;
+}
