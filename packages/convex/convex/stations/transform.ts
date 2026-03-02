@@ -1,5 +1,5 @@
 import type { Doc } from "../_generated/dataModel";
-import type { StationFeatureCollection } from "@repo/domain/geo";
+import type { StationFeatureCollection } from "@repo/transit/geo";
 
 /**
  * Filters for passenger stations and converts to GeoJSON FeatureCollection.
@@ -11,7 +11,10 @@ export function toGeoJSON(
     type: "FeatureCollection",
     features: stations
       .filter((s) => s.voyageurs === "O")
-      .map((s) => s.geo_shape as unknown as StationFeatureCollection["features"][number]),
+      .map(
+        (s) =>
+          s.geo_shape as unknown as StationFeatureCollection["features"][number],
+      ),
   };
 }
 

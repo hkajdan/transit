@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import Map from "@repo/ui/map";
-import type { GeoJsonLayerConfig } from "@repo/ui/map";
+import { stationsLayer } from "@repo/transit/layers";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
-import { api } from "@repo/backend/api";
+import { api } from "@repo/convex/api";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -14,21 +14,7 @@ function Index() {
     convexQuery(api.stations.queries.getStations, { limit: 7000 }),
   );
 
-  const mapLayers: GeoJsonLayerConfig[] = data
-    ? [
-        {
-          id: "stations",
-          data: data,
-          style: {
-            type: "circle",
-            paint: {
-              "circle-radius": 2.5,
-              "circle-color": "#0066CC",
-            },
-          },
-        },
-      ]
-    : [];
+  const mapLayers = data ? [stationsLayer(data)] : [];
 
   return (
     <div className="w-full h-screen">

@@ -1,5 +1,5 @@
 {
-  "name": "@repo/backend",
+  "name": "@repo/convex",
   "version": "1.0.0",
   "type": "module",
   "description": "",
@@ -15,10 +15,10 @@
   "license": "ISC",
   "packageManager": "pnpm@10.30.2",
   "dependencies": {
-    "@repo/domain": "workspace:*",
     "convex": "^1.32.0"
   },
   "devDependencies": {
+    "@repo/transit": "workspace:*",
     "typescript": "^5.9.3"
   }
 }

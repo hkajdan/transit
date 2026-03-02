@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@convex-dev/react-query": "^0.1.0",
-    "@repo/backend": "workspace:*",
+    "@repo/convex": "workspace:*",
+    "@repo/transit": "workspace:*",
     "@repo/ui": "workspace:*",
     "@tanstack/devtools-vite": "^0.5.1",
     "@tanstack/react-devtools": "^0.9.6",
@@ -28,7 +29,6 @@
     "tailwindcss": "^4.1.5"
   },
   "devDependencies": {
-    "@repo/backend": "workspace:*",
     "@repo/config": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/router-plugin": "^1.162.4",
