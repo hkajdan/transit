@@ -6,7 +6,9 @@ import type { Doc } from "../_generated/dataModel";
 const BATCH_SIZE = 500;
 
 /** Map a raw sncf_stations row to a normalized stations row. */
-function normalize(raw: Doc<"sncf_stations">): Omit<Doc<"stations">, "_id" | "_creationTime"> {
+function normalize(
+  raw: Doc<"z_sncf_stations">,
+): Omit<Doc<"stations">, "_id" | "_creationTime"> {
   return {
     country: "FR",
     network: "SNCF",
@@ -47,8 +49,12 @@ export const migrateBatch = internalMutation({
   },
   handler: async (ctx, args) => {
     const query = args.cursor
-      ? ctx.db.query("sncf_stations").paginate({ cursor: args.cursor, numItems: BATCH_SIZE })
-      : ctx.db.query("sncf_stations").paginate({ cursor: null, numItems: BATCH_SIZE });
+      ? ctx.db
+          .query("z_sncf_stations")
+          .paginate({ cursor: args.cursor, numItems: BATCH_SIZE })
+      : ctx.db
+          .query("z_sncf_stations")
+          .paginate({ cursor: null, numItems: BATCH_SIZE });
 
     const { page, continueCursor, isDone } = await query;
 

@@ -71,7 +71,7 @@ export default defineSchema({
 
   // Other tables here...
 
-  sncf_stations: defineTable({
+  z_sncf_stations: defineTable({
     c_geo: v.object({ lat: v.float64(), lon: v.float64() }),
     code_ligne: v.string(),
     code_uic: v.string(),
