@@ -15,7 +15,8 @@ function resolveStationType(
   if (station === "subway") return "metro";
   if (station === "light_rail") return "light_rail";
   if (station === "tram") return "tram";
-  if (tags["network"] === "RER" || tags["line"]?.startsWith("RER")) return "rer";
+  if (tags["network"] === "RER" || tags["line"]?.startsWith("RER"))
+    return "rer";
   if (tags["railway"] === "station") return "train";
   return "unknown";
 }

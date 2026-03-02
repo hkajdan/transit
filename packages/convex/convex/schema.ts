@@ -162,5 +162,5 @@ export default defineSchema({
     x_wgs84: v.float64(),
     y_l93: v.float64(),
     y_wgs84: v.float64(),
-  }),
+  }).index("by_code_uic", ["code_uic"]),
 });

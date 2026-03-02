@@ -1,4 +1,8 @@
-import { internalAction, internalMutation, mutation } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  mutation,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
@@ -7,7 +11,7 @@ const BATCH_SIZE = 500;
 
 /** Tags we care about from OSM — stored in z_osm_stations.tags */
 const OVERPASS_QUERY = `
-[out:json][timeout:90];
+[out:json][timeout:300];
 (
   node["railway"="station"]({{bbox}});
   node["railway"="halt"]({{bbox}});
@@ -20,6 +24,8 @@ out body;
 
 /** Bounding box covering mainland France + Corsica */
 const FRANCE_BBOX = "41.0,-5.5,51.5,10.0";
+
+/** Reduced bbox for testing — Île-de-France */
 
 type OverpassNode = {
   type: "node";
@@ -43,11 +49,23 @@ export const fetchAndStoreOsm = internalAction({
     });
 
     if (!response.ok) {
-      throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Overpass API error: ${response.status} ${response.statusText}`,
+      );
     }
 
     const json = (await response.json()) as { elements: OverpassNode[] };
-    const nodes = json.elements.filter((e) => e.type === "node");
+    // Convex only allows ASCII field names — strip non-ASCII keys before passing to mutation
+    const nodes = json.elements
+      .filter((e) => e.type === "node")
+      .map((e) => ({
+        ...e,
+        tags: e.tags
+          ? Object.fromEntries(
+              Object.entries(e.tags).filter(([k]) => /^[\x20-\x7E]+$/.test(k)),
+            )
+          : undefined,
+      }));
 
     // Insert in batches to avoid mutation size limits
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {

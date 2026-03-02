@@ -5,7 +5,7 @@ import type { Doc } from "../_generated/dataModel";
 
 const BATCH_SIZE = 500;
 
-/** Map a raw sncf_stations row to a normalized stations row. */
+/** Map a raw z_sncf_stations row to a normalized stations row. */
 function normalize(
   raw: Doc<"z_sncf_stations">,
 ): Omit<Doc<"stations">, "_id" | "_creationTime"> {
@@ -39,30 +39,17 @@ function normalize(
   };
 }
 
-/**
- * Internal batch: reads up to BATCH_SIZE rows from sncf_stations starting
- * after `cursor`, upserts them into stations, then reschedules itself if
- * there are more rows to process.
- */
 export const migrateBatch = internalMutation({
   args: {
     cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const query = args.cursor
-      ? ctx.db
-          .query("z_sncf_stations")
-          .paginate({ cursor: args.cursor, numItems: BATCH_SIZE })
-      : ctx.db
-          .query("z_sncf_stations")
-          .paginate({ cursor: null, numItems: BATCH_SIZE });
-
-    const { page, continueCursor, isDone } = await query;
+    const { page, continueCursor, isDone } = await ctx.db
+      .query("z_sncf_stations")
+      .paginate({ cursor: args.cursor ?? null, numItems: BATCH_SIZE });
 
     for (const raw of page) {
       const normalized = normalize(raw);
-
-      // Upsert: replace existing station with same UIC code if present
       const existing = await ctx.db
         .query("stations")
         .withIndex("by_uic_code", (q) => q.eq("uic_code", normalized.uic_code))
@@ -76,7 +63,7 @@ export const migrateBatch = internalMutation({
     }
 
     if (!isDone) {
-      await ctx.scheduler.runAfter(0, internal.stations.migrate.migrateBatch, {
+      await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateBatch, {
         cursor: continueCursor,
       });
     }
@@ -85,14 +72,11 @@ export const migrateBatch = internalMutation({
   },
 });
 
-/**
- * Public entry point — call this once from the Convex dashboard or CLI
- * to kick off the migration.
- */
+/** Public entry point — trigger from dashboard or CLI */
 export const migrateSncfStations = mutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.stations.migrate.migrateBatch, {});
+    await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateBatch, {});
     return "Migration started";
   },
 });
