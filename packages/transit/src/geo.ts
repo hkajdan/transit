@@ -21,3 +21,24 @@ export function featureCollection(
 ): StationFeatureCollection {
   return { type: "FeatureCollection", features };
 }
+
+export interface LineStringGeometry {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+export interface RailwayFeature {
+  type: "Feature";
+  geometry: LineStringGeometry;
+  properties: {
+    line_code: string;
+    railway_type: string;
+    max_speed_kmh: number | null;
+    name: string;
+  };
+}
+
+export interface RailwayFeatureCollection {
+  type: "FeatureCollection";
+  features: RailwayFeature[];
+}

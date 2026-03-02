@@ -10,6 +10,8 @@
 
 import type * as osm_enrich from "../osm/enrich.js";
 import type * as osm_ingest from "../osm/ingest.js";
+import type * as railways_queries from "../railways/queries.js";
+import type * as railways_transform from "../railways/transform.js";
 import type * as sncf_ingest from "../sncf/ingest.js";
 import type * as sncf_ingest_railways from "../sncf/ingest_railways.js";
 import type * as sncf_migrate from "../sncf/migrate.js";
@@ -26,6 +28,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   "osm/enrich": typeof osm_enrich;
   "osm/ingest": typeof osm_ingest;
+  "railways/queries": typeof railways_queries;
+  "railways/transform": typeof railways_transform;
   "sncf/ingest": typeof sncf_ingest;
   "sncf/ingest_railways": typeof sncf_ingest_railways;
   "sncf/migrate": typeof sncf_migrate;

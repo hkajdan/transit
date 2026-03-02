@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import Map from "@repo/ui/map";
-import { stationsLayer } from "@repo/transit/layers";
+import { stationsLayer, railwaysLayer } from "@repo/transit/layers";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@repo/convex/api";
@@ -10,11 +10,17 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { data } = useQuery(
+  const { data: stations } = useQuery(
     convexQuery(api.stations.queries.getStations, { limit: 7000 }),
   );
+  const { data: railways } = useQuery(
+    convexQuery(api.railways.queries.getRailways, {}),
+  );
 
-  const mapLayers = data ? [stationsLayer(data)] : [];
+  const mapLayers = [
+    ...(railways ? [railwaysLayer(railways)] : []),
+    ...(stations ? [stationsLayer(stations)] : []),
+  ];
 
   return (
     <div className="w-full h-screen">
