@@ -10,7 +10,7 @@ export function toGeoJSON(
   return {
     type: "FeatureCollection",
     features: stations
-      .filter((s) => s.voyageurs === "O")
+      .filter((s) => s.is_passenger)
       .map(
         (s) =>
           s.geo_shape as unknown as StationFeatureCollection["features"][number],
@@ -19,5 +19,5 @@ export function toGeoJSON(
 }
 
 export function isPassengerStation(station: Doc<"stations">): boolean {
-  return station.voyageurs === "O";
+  return station.is_passenger;
 }
