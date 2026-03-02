@@ -101,6 +101,7 @@ export default defineSchema({
     network: v.string(),
     name: v.string(),
     line_code: v.string(),
+    rg_troncon: v.optional(v.number()), // tronçon index within line (SNCF-specific)
     is_active: v.boolean(),
 
     railway_type: v.union(
@@ -131,7 +132,29 @@ export default defineSchema({
   })
     .index("by_country", ["country"])
     .index("by_line_code", ["line_code"])
-    .index("by_country_type", ["country", "railway_type"]),
+    .index("by_country_type", ["country", "railway_type"])
+    .index("by_line_code_troncon", ["line_code", "rg_troncon"]),
+
+  // --- SNCF Railways: raw tronçon data from 5 open data endpoints ---
+  z_sncf_railways: defineTable({
+    code_ligne: v.string(),
+    rg_troncon: v.number(),
+    lib_ligne: v.optional(v.string()),
+    mnemo: v.string(),                 // status code ("SERV", "NEUT"...)
+    statut: v.optional(v.string()),    // human readable ("Exploitée", "Neutralisée"...)
+    type_ligne: v.optional(v.string()), // "LGV", "Rac", "SERV"...
+    v_max: v.optional(v.number()),
+    pk_debut: v.string(),
+    pk_fin: v.string(),
+    geo_shape: v.object({
+      type: v.string(),
+      geometry: v.object({ type: v.string(), coordinates: v.any() }),
+      properties: v.object({}),
+    }),
+    metadata: v.optional(v.any()),     // voies/déclivité brutes
+  })
+    .index("by_code_ligne", ["code_ligne"])
+    .index("by_code_ligne_troncon", ["code_ligne", "rg_troncon"]),
 
   z_sncf_stations: defineTable({
     c_geo: v.object({ lat: v.float64(), lon: v.float64() }),
