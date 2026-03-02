@@ -2,8 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Other tables here...
-
   stations: defineTable({
     c_geo: v.object({ lat: v.float64(), lon: v.float64() }),
     code_ligne: v.string(),
@@ -33,5 +31,35 @@ export default defineSchema({
     x_wgs84: v.float64(),
     y_l93: v.float64(),
     y_wgs84: v.float64(),
-  }),
+  }).index("by_code_uic", ["code_uic"]),
+
+  attendance: defineTable({
+    code_postal: v.string(),
+    code_uic_complet: v.string(),
+    direction_regionale_gares: v.union(v.null(), v.string()),
+    nom_gare: v.string(),
+    non_voyageurs: v.float64(),
+    segmentation_drg: v.union(v.null(), v.string()),
+    segmentation_marketing: v.union(v.null(), v.string()),
+    total_voyageurs_2015: v.float64(),
+    total_voyageurs_2016: v.float64(),
+    total_voyageurs_2018: v.float64(),
+    total_voyageurs_2019: v.float64(),
+    total_voyageurs_2020: v.float64(),
+    total_voyageurs_2021: v.float64(),
+    total_voyageurs_2022: v.float64(),
+    total_voyageurs_2023: v.float64(),
+    total_voyageurs_2024: v.float64(),
+    total_voyageurs_non_voyageurs_2015: v.float64(),
+    total_voyageurs_non_voyageurs_2016: v.float64(),
+    total_voyageurs_non_voyageurs_2017: v.float64(),
+    total_voyageurs_non_voyageurs_2018: v.float64(),
+    total_voyageurs_non_voyageurs_2019: v.float64(),
+    total_voyageurs_non_voyageurs_2020: v.float64(),
+    total_voyageurs_non_voyageurs_2021: v.float64(),
+    total_voyageurs_non_voyageurs_2022: v.float64(),
+    total_voyageurs_non_voyageurs_2023: v.float64(),
+    total_voyageurs_non_voyageurs_2024: v.float64(),
+    totalvoyageurs2017: v.float64(),
+  }).index("by_uic", ["code_uic_complet"]),
 });

@@ -10,7 +10,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { data } = useQuery(convexQuery(api.sncf.getStations));
+  const { data } = useQuery(
+    convexQuery(api.stations.queries.getStations, { limit: 7000 }),
+  );
 
   const mapLayers: GeoJsonLayerConfig[] = data
     ? [
@@ -20,8 +22,8 @@ function Index() {
           style: {
             type: "circle",
             paint: {
-              "circle-radius": 8,
-              "circle-color": "#FF0000",
+              "circle-radius": 2.5,
+              "circle-color": "#0066CC",
             },
           },
         },
@@ -30,7 +32,7 @@ function Index() {
 
   return (
     <div className="w-full h-screen">
-      <Map center={[2.3513, 48.8575]} zoom={12} layers={mapLayers} />
+      <Map center={[2.3513, 46.8575]} zoom={5.3} layers={mapLayers} />
     </div>
   );
 }

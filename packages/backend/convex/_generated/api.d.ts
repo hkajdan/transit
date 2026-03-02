@@ -8,8 +8,8 @@
  * @module
  */
 
-import type * as sncf from "../sncf.js";
-import type * as test from "../test.js";
+import type * as stations_queries from "../stations/queries.js";
+import type * as stations_transform from "../stations/transform.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +18,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  sncf: typeof sncf;
-  test: typeof test;
+  "stations/queries": typeof stations_queries;
+  "stations/transform": typeof stations_transform;
 }>;
 
 /**
