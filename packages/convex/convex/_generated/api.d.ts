@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as stations_migrate from "../stations/migrate.js";
 import type * as stations_queries from "../stations/queries.js";
 import type * as stations_transform from "../stations/transform.js";
 
@@ -18,6 +19,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "stations/migrate": typeof stations_migrate;
   "stations/queries": typeof stations_queries;
   "stations/transform": typeof stations_transform;
 }>;
