@@ -1,0 +1,108 @@
+import { internalAction, internalMutation, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
+import { v } from "convex/values";
+
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const BATCH_SIZE = 500;
+
+/** Tags we care about from OSM — stored in z_osm_stations.tags */
+const OVERPASS_QUERY = `
+[out:json][timeout:90];
+(
+  node["railway"="station"]({{bbox}});
+  node["railway"="halt"]({{bbox}});
+  node["railway"="tram_stop"]({{bbox}});
+  node["station"="subway"]({{bbox}});
+  node["station"="light_rail"]({{bbox}});
+);
+out body;
+`.trim();
+
+/** Bounding box covering mainland France + Corsica */
+const FRANCE_BBOX = "41.0,-5.5,51.5,10.0";
+
+type OverpassNode = {
+  type: "node";
+  id: number;
+  lat: number;
+  lon: number;
+  tags?: Record<string, string>;
+};
+
+/** Fetch all railway stop nodes from Overpass for a given bounding box */
+export const fetchAndStoreOsm = internalAction({
+  args: { bbox: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const bbox = args.bbox ?? FRANCE_BBOX;
+    const query = OVERPASS_QUERY.replaceAll("{{bbox}}", bbox);
+
+    const response = await fetch(OVERPASS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `data=${encodeURIComponent(query)}`,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+    }
+
+    const json = (await response.json()) as { elements: OverpassNode[] };
+    const nodes = json.elements.filter((e) => e.type === "node");
+
+    // Insert in batches to avoid mutation size limits
+    for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
+      const batch = nodes.slice(i, i + BATCH_SIZE);
+      await ctx.runMutation(internal.osm.ingest.insertBatch, { nodes: batch });
+    }
+
+    return { total: nodes.length };
+  },
+});
+
+export const insertBatch = internalMutation({
+  args: {
+    nodes: v.array(
+      v.object({
+        type: v.literal("node"),
+        id: v.number(),
+        lat: v.float64(),
+        lon: v.float64(),
+        tags: v.optional(v.any()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    for (const node of args.nodes) {
+      const existing = await ctx.db
+        .query("z_osm_stations")
+        .withIndex("by_osm_id", (q) => q.eq("osm_id", node.id))
+        .unique();
+
+      const row = {
+        osm_id: node.id,
+        osm_type: "node" as const,
+        uic_ref: node.tags?.uic_ref,
+        lat: node.lat,
+        lon: node.lon,
+        tags: node.tags ?? {},
+      };
+
+      if (existing) {
+        await ctx.db.replace(existing._id, row);
+      } else {
+        await ctx.db.insert("z_osm_stations", row);
+      }
+    }
+  },
+});
+
+/** Public entry point — trigger from dashboard or CLI */
+export const ingestOsmStations = mutation({
+  args: { bbox: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(0, internal.osm.ingest.fetchAndStoreOsm, {
+      bbox: args.bbox,
+    });
+    return "OSM ingest started";
+  },
+});

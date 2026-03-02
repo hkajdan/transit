@@ -12,6 +12,7 @@ function normalize(
   return {
     country: "FR",
     network: "SNCF",
+    station_type: "train",
     name: raw.libelle,
     uic_code: raw.code_uic,
     is_passenger: raw.voyageurs === "O",

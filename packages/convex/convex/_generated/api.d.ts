@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as osm_enrich from "../osm/enrich.js";
+import type * as osm_ingest from "../osm/ingest.js";
 import type * as stations_migrate from "../stations/migrate.js";
 import type * as stations_queries from "../stations/queries.js";
 import type * as stations_transform from "../stations/transform.js";
@@ -19,6 +21,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "osm/enrich": typeof osm_enrich;
+  "osm/ingest": typeof osm_ingest;
   "stations/migrate": typeof stations_migrate;
   "stations/queries": typeof stations_queries;
   "stations/transform": typeof stations_transform;
