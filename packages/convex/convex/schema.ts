@@ -87,8 +87,15 @@ export default defineSchema({
       v.literal("unknown"),
     ),
 
+    gauge_mm: v.optional(v.number()),
+    electrification: v.array(v.object({
+      voltage_v: v.number(),
+      current: v.union(v.literal("AC"), v.literal("DC")),
+      contact: v.union(v.literal("overhead"), v.literal("third_rail")),
+    })),
+
     segments: v.array(v.object({
-      rg_troncon: v.number(),
+      segment_id: v.number(),
       is_active: v.boolean(),
       geo_shape: v.object({
         type: v.string(),
@@ -98,18 +105,22 @@ export default defineSchema({
     })),
 
     speeds: v.array(v.object({
-      rg_troncon: v.number(),
+      segment_id: v.number(),
       v_max: v.number(),
       pkd: v.string(),
       pkf: v.string(),
+      c_geo_d: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
+      c_geo_f: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
     })),
 
     characteristics: v.array(v.object({
-      rg_troncon: v.number(),
-      type: v.string(), // "PENTE", "ALIGNEMENT", etc.
-      valeur: v.number(),
+      segment_id: v.number(),
+      type: v.string(), // "GRADIENT", "ALIGNMENT", etc.
+      value: v.number(),
       pkd: v.string(),
       pkf: v.string(),
+      c_geo_d: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
+      c_geo_f: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
     })),
   })
     .index("by_country", ["country"])
@@ -120,7 +131,9 @@ export default defineSchema({
   z_sncf_railways: defineTable({
     code_ligne: v.string(),
     lib_ligne: v.optional(v.string()),
-    type_ligne: v.optional(v.string()), // "LGV", "Rac", "SERV"...
+    type_ligne: v.optional(v.string()), // "Ligne", "Rac", "Vmère", "Vport"
+    catlig: v.optional(v.string()),     // "Ligne à grande vitesse", "...écartement normal", "...voie étroite"
+    electrification: v.array(v.string()), // raw French strings, e.g. "1500 volts continu"
     segments: v.array(v.object({
       rg_troncon: v.number(),
       mnemo: v.string(), // status code ("SERV", "NEUT"...)
@@ -138,6 +151,8 @@ export default defineSchema({
       v_max: v.number(),
       pkd: v.string(),
       pkf: v.string(),
+      c_geo_d: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
+      c_geo_f: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
     })),
     characteristics: v.array(v.object({
       rg_troncon: v.number(),
@@ -145,6 +160,8 @@ export default defineSchema({
       valeur: v.number(),
       pkd: v.string(),
       pkf: v.string(),
+      c_geo_d: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
+      c_geo_f: v.union(v.null(), v.object({ lon: v.float64(), lat: v.float64() })),
     })),
   })
     .index("by_code_ligne", ["code_ligne"]),
