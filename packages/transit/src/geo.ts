@@ -33,8 +33,8 @@ export interface RailwayFeature {
   properties: {
     line_code: string;
     railway_type: string;
-    max_speed_kmh: number | null;
     name: string;
+    is_active: boolean;
   };
 }
 

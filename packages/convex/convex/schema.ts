@@ -32,13 +32,13 @@ export default defineSchema({
     }),
 
     station_type: v.union(
-      v.literal("train"),      // gare ferroviaire intercités/TGV/régional
-      v.literal("metro"),      // métro urbain
-      v.literal("rer"),        // RER (spécifique IDF)
-      v.literal("tram"),       // tramway
+      v.literal("train"), // gare ferroviaire intercités/TGV/régional
+      v.literal("metro"), // métro urbain
+      v.literal("rer"), // RER (spécifique IDF)
+      v.literal("tram"), // tramway
       v.literal("light_rail"), // train léger / tramway-train
-      v.literal("halt"),       // halte (petit arrêt sans guichet)
-      v.literal("unknown"),    // fallback
+      v.literal("halt"), // halte (petit arrêt sans guichet)
+      v.literal("unknown"), // fallback
     ),
 
     // Source-specific fields — not queryable, varies per country
@@ -49,60 +49,32 @@ export default defineSchema({
     .index("by_country_passenger", ["country", "is_passenger"])
     .index("by_country_type", ["country", "station_type"]),
 
-  // --- Attendance: SNCF ridership statistics ---
-  attendance: defineTable({
-    code_postal: v.string(),
-    code_uic_complet: v.string(),
-    direction_regionale_gares: v.union(v.null(), v.string()),
-    nom_gare: v.string(),
-    non_voyageurs: v.float64(),
-    segmentation_drg: v.union(v.null(), v.string()),
-    segmentation_marketing: v.union(v.null(), v.string()),
-    total_voyageurs_2015: v.float64(),
-    total_voyageurs_2016: v.float64(),
-    total_voyageurs_2018: v.float64(),
-    total_voyageurs_2019: v.float64(),
-    total_voyageurs_2020: v.float64(),
-    total_voyageurs_2021: v.float64(),
-    total_voyageurs_2022: v.float64(),
-    total_voyageurs_2023: v.float64(),
-    total_voyageurs_2024: v.float64(),
-    total_voyageurs_non_voyageurs_2015: v.float64(),
-    total_voyageurs_non_voyageurs_2016: v.float64(),
-    total_voyageurs_non_voyageurs_2017: v.float64(),
-    total_voyageurs_non_voyageurs_2018: v.float64(),
-    total_voyageurs_non_voyageurs_2019: v.float64(),
-    total_voyageurs_non_voyageurs_2020: v.float64(),
-    total_voyageurs_non_voyageurs_2021: v.float64(),
-    total_voyageurs_non_voyageurs_2022: v.float64(),
-    total_voyageurs_non_voyageurs_2023: v.float64(),
-    total_voyageurs_non_voyageurs_2024: v.float64(),
-    totalvoyageurs2017: v.float64(),
-  }).index("by_uic", ["code_uic_complet"]),
-
   // --- OSM: raw Overpass data ---
   z_osm_stations: defineTable({
     osm_id: v.number(),
-    osm_type: v.string(),          // "node" | "way" | "relation"
+    osm_type: v.string(), // "node" | "way" | "relation"
     uic_ref: v.optional(v.string()), // join key with stations.uic_code
     lat: v.float64(),
     lon: v.float64(),
-    tags: v.any(),                 // raw OSM tags
+    tags: v.any(), // raw OSM tags
   })
     .index("by_uic_ref", ["uic_ref"])
     .index("by_osm_id", ["osm_id"]),
 
-  // --- Railways: physical rail infrastructure ---
+  // --- Railways: physical rail infrastructure (one doc per line_code) ---
   railways: defineTable({
     country: v.union(
-      v.literal("FR"), v.literal("DE"), v.literal("CH"),
-      v.literal("BE"), v.literal("NL"), v.literal("IT"), v.literal("ES"),
+      v.literal("FR"),
+      v.literal("DE"),
+      v.literal("CH"),
+      v.literal("BE"),
+      v.literal("NL"),
+      v.literal("IT"),
+      v.literal("ES"),
     ),
     network: v.string(),
     name: v.string(),
     line_code: v.string(),
-    rg_troncon: v.optional(v.number()), // tronçon index within line (SNCF-specific)
-    is_active: v.boolean(),
 
     railway_type: v.union(
       v.literal("high_speed"),
@@ -115,49 +87,67 @@ export default defineSchema({
       v.literal("unknown"),
     ),
 
-    electrified: v.optional(v.boolean()),
-    gauge_mm: v.optional(v.number()),
-    max_speed_kmh: v.optional(v.number()),
-
-    geo_shape: v.object({
-      type: v.string(),
-      geometry: v.object({
+    segments: v.array(v.object({
+      rg_troncon: v.number(),
+      is_active: v.boolean(),
+      geo_shape: v.object({
         type: v.string(),
-        coordinates: v.any(),
+        geometry: v.object({ type: v.string(), coordinates: v.any() }),
+        properties: v.object({}),
       }),
-      properties: v.object({}),
-    }),
+    })),
 
-    pk_debut: v.optional(v.string()),   // segment start km point (SNCF-specific)
-    metadata: v.optional(v.any()),
+    speeds: v.array(v.object({
+      rg_troncon: v.number(),
+      v_max: v.number(),
+      pkd: v.string(),
+      pkf: v.string(),
+    })),
+
+    characteristics: v.array(v.object({
+      rg_troncon: v.number(),
+      type: v.string(), // "PENTE", "ALIGNEMENT", etc.
+      valeur: v.number(),
+      pkd: v.string(),
+      pkf: v.string(),
+    })),
   })
     .index("by_country", ["country"])
     .index("by_line_code", ["line_code"])
-    .index("by_country_type", ["country", "railway_type"])
-    .index("by_line_code_troncon", ["line_code", "rg_troncon"])
-    .index("by_segment", ["line_code", "rg_troncon", "pk_debut"]),
+    .index("by_country_type", ["country", "railway_type"]),
 
-  // --- SNCF Railways: raw tronçon data from 5 open data endpoints ---
+  // --- SNCF Railways: raw staging data (one doc per code_ligne) ---
   z_sncf_railways: defineTable({
     code_ligne: v.string(),
-    rg_troncon: v.number(),
     lib_ligne: v.optional(v.string()),
-    mnemo: v.string(),                 // status code ("SERV", "NEUT"...)
-    statut: v.optional(v.string()),    // human readable ("Exploitée", "Neutralisée"...)
     type_ligne: v.optional(v.string()), // "LGV", "Rac", "SERV"...
-    v_max: v.optional(v.number()),
-    pk_debut: v.string(),
-    pk_fin: v.string(),
-    geo_shape: v.object({
+    segments: v.array(v.object({
+      rg_troncon: v.number(),
+      mnemo: v.string(), // status code ("SERV", "NEUT"...)
+      statut: v.optional(v.string()), // human readable ("Exploitée", "Neutralisée"...)
+      pk_debut: v.string(),
+      pk_fin: v.string(),
+      geo_shape: v.object({
+        type: v.string(),
+        geometry: v.object({ type: v.string(), coordinates: v.any() }),
+        properties: v.object({}),
+      }),
+    })),
+    speeds: v.array(v.object({
+      rg_troncon: v.number(),
+      v_max: v.number(),
+      pkd: v.string(),
+      pkf: v.string(),
+    })),
+    characteristics: v.array(v.object({
+      rg_troncon: v.number(),
       type: v.string(),
-      geometry: v.object({ type: v.string(), coordinates: v.any() }),
-      properties: v.object({}),
-    }),
-    metadata: v.optional(v.any()),     // voies/déclivité brutes
+      valeur: v.number(),
+      pkd: v.string(),
+      pkf: v.string(),
+    })),
   })
-    .index("by_code_ligne", ["code_ligne"])
-    .index("by_code_ligne_troncon", ["code_ligne", "rg_troncon"])
-    .index("by_segment", ["code_ligne", "rg_troncon", "pk_debut"]),
+    .index("by_code_ligne", ["code_ligne"]),
 
   z_sncf_stations: defineTable({
     c_geo: v.object({ lat: v.float64(), lon: v.float64() }),

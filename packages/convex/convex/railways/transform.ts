@@ -4,17 +4,17 @@ import type { RailwayFeatureCollection } from "@repo/transit/geo";
 export function toGeoJSON(railways: Doc<"railways">[]): RailwayFeatureCollection {
   return {
     type: "FeatureCollection",
-    features: railways
-      .filter((r) => r.is_active)
-      .map((r) => ({
+    features: railways.flatMap((r) =>
+      r.segments.map((s) => ({
         type: "Feature" as const,
-        geometry: r.geo_shape.geometry as RailwayFeatureCollection["features"][number]["geometry"],
+        geometry: s.geo_shape.geometry as RailwayFeatureCollection["features"][number]["geometry"],
         properties: {
           line_code: r.line_code,
           railway_type: r.railway_type,
-          max_speed_kmh: r.max_speed_kmh ?? null,
           name: r.name,
+          is_active: s.is_active,
         },
-      })),
+      }))
+    ),
   };
 }

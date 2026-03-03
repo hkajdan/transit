@@ -40,9 +40,16 @@ type TypeLookup = {
   lib_ligne: string | null;
   type_ligne: string;
 };
-type VitesseLookup = { code_ligne: string; rg_troncon: number; v_max: string };
+type VitesseLookup = {
+  code_ligne: string;
+  rg_troncon: number;
+  v_max: string;
+  pkd: string;
+  pkf: string;
+};
 type CaracLookup = {
   code_ligne: string;
+  rg_troncon: number;
   type: string;
   valeur: number;
   pkd: string;
@@ -82,7 +89,7 @@ async function fetchFormesPage(
 export const fetchAndStoreSncfRailways = internalAction({
   args: {},
   handler: async (ctx) => {
-    const key = (code: string, rg: number) => `${code}|${rg}`;
+    const tronconKey = (code: string, rg: number) => `${code}|${rg}`;
 
     const [statuts, types, vitesses, caracs] = await Promise.all([
       fetchAllScalar<StatutLookup>("lignes-par-statut", [
@@ -101,9 +108,12 @@ export const fetchAndStoreSncfRailways = internalAction({
         "code_ligne",
         "rg_troncon",
         "v_max",
+        "pkd",
+        "pkf",
       ]),
       fetchAllScalar<CaracLookup>("caracteristique-des-voies-et-declivite", [
         "code_ligne",
+        "rg_troncon",
         "type",
         "valeur",
         "pkd",
@@ -112,19 +122,24 @@ export const fetchAndStoreSncfRailways = internalAction({
     ]);
 
     const statutMap = new Map(
-      statuts.map((r) => [key(r.code_ligne, r.rg_troncon), r]),
+      statuts.map((r) => [tronconKey(r.code_ligne, r.rg_troncon), r]),
     );
     const typeMap = new Map(
-      types.map((r) => [key(r.code_ligne, r.rg_troncon), r]),
-    );
-    const vitesseMap = new Map(
-      vitesses.map((r) => [key(r.code_ligne, r.rg_troncon), r]),
+      types.map((r) => [tronconKey(r.code_ligne, r.rg_troncon), r]),
     );
 
-    const caracMap = new Map<string, CaracLookup[]>();
+    // Group speeds and characteristics by code_ligne (many per line)
+    const speedsMap = new Map<string, { rg_troncon: number; v_max: number; pkd: string; pkf: string }[]>();
+    for (const v of vitesses) {
+      const arr = speedsMap.get(v.code_ligne) ?? [];
+      arr.push({ rg_troncon: v.rg_troncon, v_max: parseFloat(v.v_max), pkd: v.pkd, pkf: v.pkf });
+      speedsMap.set(v.code_ligne, arr);
+    }
+
+    const caracMap = new Map<string, { rg_troncon: number; type: string; valeur: number; pkd: string; pkf: string }[]>();
     for (const c of caracs) {
       const arr = caracMap.get(c.code_ligne) ?? [];
-      arr.push(c);
+      arr.push({ rg_troncon: c.rg_troncon, type: c.type, valeur: c.valeur, pkd: c.pkd, pkf: c.pkf });
       caracMap.set(c.code_ligne, arr);
     }
 
@@ -135,22 +150,23 @@ export const fetchAndStoreSncfRailways = internalAction({
       const { results: formes, done } = await fetchFormesPage(offset);
 
       const batch = formes.map((f) => {
-        const k = key(f.code_ligne, f.rg_troncon);
+        const k = tronconKey(f.code_ligne, f.rg_troncon);
         const statut = statutMap.get(k);
         const type = typeMap.get(k);
-        const vitesse = vitesseMap.get(k);
         return {
           code_ligne: f.code_ligne,
-          rg_troncon: f.rg_troncon,
           lib_ligne: statut?.lib_ligne ?? type?.lib_ligne ?? undefined,
-          mnemo: f.mnemo,
-          statut: statut?.statut,
           type_ligne: type?.type_ligne,
-          v_max: vitesse?.v_max ? parseFloat(vitesse.v_max) : undefined,
-          pk_debut: f.pk_debut_r,
-          pk_fin: f.pk_fin_r,
-          geo_shape: f.geo_shape,
-          metadata: { voies: caracMap.get(f.code_ligne) ?? [] },
+          segment: {
+            rg_troncon: f.rg_troncon,
+            mnemo: f.mnemo,
+            statut: statut?.statut,
+            pk_debut: f.pk_debut_r,
+            pk_fin: f.pk_fin_r,
+            geo_shape: f.geo_shape,
+          },
+          speeds: speedsMap.get(f.code_ligne) ?? [],
+          characteristics: caracMap.get(f.code_ligne) ?? [],
         };
       });
 
@@ -164,52 +180,95 @@ export const fetchAndStoreSncfRailways = internalAction({
     }
 
     console.log(
-      `[sncf/railways] fetchAndStoreSncfRailways: fetched and stored ${total} railways`,
+      `[sncf/railways] fetchAndStoreSncfRailways: fetched and stored ${total} forme records`,
     );
     return { total };
   },
 });
 
+/** Merge an incoming LineString into an existing geometry (LineString or MultiLineString). */
+function mergeGeometry(
+  existing: GeoShape,
+  incoming: GeoShape,
+): GeoShape {
+  const incomingCoords = (incoming.geometry as { type: string; coordinates: unknown[] }).coordinates;
+  const existingGeom = existing.geometry as { type: string; coordinates: unknown[] };
+
+  const allCoords: unknown[][] =
+    existingGeom.type === "MultiLineString"
+      ? [...(existingGeom.coordinates as unknown[][]), incomingCoords as unknown[]]
+      : [existingGeom.coordinates as unknown[], incomingCoords as unknown[]];
+
+  return {
+    ...existing,
+    geometry: { type: "MultiLineString", coordinates: allCoords },
+  };
+}
+
+type IncomingSegment = {
+  rg_troncon: number;
+  mnemo: string;
+  statut?: string;
+  pk_debut: string;
+  pk_fin: string;
+  geo_shape: GeoShape;
+};
+
 export const insertSncfRailwaysBatch = internalMutation({
   args: { records: v.array(v.any()) },
   handler: async (ctx, args) => {
     let inserted = 0;
-    let updated = 0;
+    let merged = 0;
 
     for (const record of args.records as Array<{
       code_ligne: string;
-      rg_troncon: number;
       lib_ligne?: string;
-      mnemo: string;
-      statut?: string;
       type_ligne?: string;
-      v_max?: number;
-      pk_debut: string;
-      pk_fin: string;
-      geo_shape: GeoShape;
-      metadata?: unknown;
+      segment: IncomingSegment;
+      speeds: { rg_troncon: number; v_max: number; pkd: string; pkf: string }[];
+      characteristics: { rg_troncon: number; type: string; valeur: number; pkd: string; pkf: string }[];
     }>) {
       const existing = await ctx.db
         .query("z_sncf_railways")
-        .withIndex("by_segment", (q) =>
-          q
-            .eq("code_ligne", record.code_ligne)
-            .eq("rg_troncon", record.rg_troncon)
-            .eq("pk_debut", record.pk_debut),
-        )
+        .withIndex("by_code_ligne", (q) => q.eq("code_ligne", record.code_ligne))
         .unique();
 
       if (existing) {
-        await ctx.db.replace(existing._id, record);
-        updated++;
+        // Check if this rg_troncon already exists in segments
+        const existingSegIdx = existing.segments.findIndex(
+          (s) => s.rg_troncon === record.segment.rg_troncon,
+        );
+        if (existingSegIdx >= 0) {
+          const updatedSegments = [...existing.segments];
+          updatedSegments[existingSegIdx] = {
+            ...updatedSegments[existingSegIdx],
+            geo_shape: mergeGeometry(
+              updatedSegments[existingSegIdx].geo_shape,
+              record.segment.geo_shape,
+            ),
+          };
+          await ctx.db.patch(existing._id, { segments: updatedSegments });
+        } else {
+          await ctx.db.patch(existing._id, {
+            segments: [...existing.segments, record.segment],
+          });
+        }
+        merged++;
       } else {
-        await ctx.db.insert("z_sncf_railways", record);
+        await ctx.db.insert("z_sncf_railways", {
+          code_ligne: record.code_ligne,
+          lib_ligne: record.lib_ligne,
+          type_ligne: record.type_ligne,
+          segments: [record.segment],
+          speeds: record.speeds,
+          characteristics: record.characteristics,
+        });
         inserted++;
       }
     }
 
     console.log(
-      `[sncf/railways] insertSncfRailwaysBatch: total=${args.records.length} inserted=${inserted} updated=${updated}`,
+      `[sncf/railways] insertSncfRailwaysBatch: total=${args.records.length} inserted=${inserted} merged=${merged}`,
     );
   },
 });
@@ -229,9 +288,17 @@ function mapRailwayType(type_ligne: string | undefined): RailwayType {
   return "unknown";
 }
 
-function isActive(statut: string | undefined, mnemo: string): boolean {
-  if (statut) return statut.toLowerCase().includes("exploit");
-  return mnemo === "SERV";
+// Only statuts where the track has been physically lifted off the ground.
+// "déposée" = track removed. "non déposée" = closed but track still in place.
+// "Retranchée" = section cut back but infrastructure gone.
+const REMOVED_STATUTS = new Set([
+  "Fermée et déposée (Plus utilisable)",
+  "Retranchée (Plus utilisable)",
+]);
+
+function isActive(statut: string | undefined): boolean {
+  if (!statut) return true;
+  return !REMOVED_STATUTS.has(statut);
 }
 
 function normalize(
@@ -242,13 +309,14 @@ function normalize(
     network: "SNCF",
     name: raw.lib_ligne ?? raw.code_ligne,
     line_code: raw.code_ligne,
-    rg_troncon: raw.rg_troncon,
-    pk_debut: raw.pk_debut,
-    is_active: isActive(raw.statut, raw.mnemo),
     railway_type: mapRailwayType(raw.type_ligne),
-    max_speed_kmh: raw.v_max,
-    geo_shape: raw.geo_shape,
-    metadata: raw.metadata,
+    segments: raw.segments.map((s) => ({
+      rg_troncon: s.rg_troncon,
+      is_active: isActive(s.statut),
+      geo_shape: s.geo_shape,
+    })),
+    speeds: raw.speeds,
+    characteristics: raw.characteristics,
   };
 }
 
@@ -267,12 +335,7 @@ export const migrateRailwaysBatch = internalMutation({
 
       const existing = await ctx.db
         .query("railways")
-        .withIndex("by_segment", (q) =>
-          q
-            .eq("line_code", normalized.line_code)
-            .eq("rg_troncon", normalized.rg_troncon)
-            .eq("pk_debut", normalized.pk_debut),
-        )
+        .withIndex("by_line_code", (q) => q.eq("line_code", normalized.line_code))
         .unique();
 
       if (existing) {
@@ -292,9 +355,7 @@ export const migrateRailwaysBatch = internalMutation({
       await ctx.scheduler.runAfter(
         0,
         internal.z_sncf.railways.migrateRailwaysBatch,
-        {
-          cursor: continueCursor,
-        },
+        { cursor: continueCursor },
       );
     }
 
