@@ -128,12 +128,14 @@ export default defineSchema({
       properties: v.object({}),
     }),
 
+    pk_debut: v.optional(v.string()),   // segment start km point (SNCF-specific)
     metadata: v.optional(v.any()),
   })
     .index("by_country", ["country"])
     .index("by_line_code", ["line_code"])
     .index("by_country_type", ["country", "railway_type"])
-    .index("by_line_code_troncon", ["line_code", "rg_troncon"]),
+    .index("by_line_code_troncon", ["line_code", "rg_troncon"])
+    .index("by_segment", ["line_code", "rg_troncon", "pk_debut"]),
 
   // --- SNCF Railways: raw tronçon data from 5 open data endpoints ---
   z_sncf_railways: defineTable({
@@ -154,7 +156,8 @@ export default defineSchema({
     metadata: v.optional(v.any()),     // voies/déclivité brutes
   })
     .index("by_code_ligne", ["code_ligne"])
-    .index("by_code_ligne_troncon", ["code_ligne", "rg_troncon"]),
+    .index("by_code_ligne_troncon", ["code_ligne", "rg_troncon"])
+    .index("by_segment", ["code_ligne", "rg_troncon", "pk_debut"]),
 
   z_sncf_stations: defineTable({
     c_geo: v.object({ lat: v.float64(), lon: v.float64() }),

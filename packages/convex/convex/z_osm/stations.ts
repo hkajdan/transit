@@ -6,10 +6,11 @@ import {
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-const BATCH_SIZE = 500;
+// ---- Ingest ----
 
-/** Tags we care about from OSM — stored in z_osm_stations.tags */
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const INGEST_BATCH_SIZE = 500;
+
 const OVERPASS_QUERY = `
 [out:json][timeout:300];
 (
@@ -25,8 +26,6 @@ out body;
 /** Bounding box covering mainland France + Corsica */
 const FRANCE_BBOX = "41.0,-5.5,51.5,10.0";
 
-/** Reduced bbox for testing — Île-de-France */
-
 type OverpassNode = {
   type: "node";
   id: number;
@@ -35,15 +34,12 @@ type OverpassNode = {
   tags?: Record<string, string>;
 };
 
-/** Fetch all railway stop nodes from Overpass for a given bounding box */
 export const fetchAndStoreOsm = internalAction({
   args: { bbox: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const bbox = args.bbox ?? FRANCE_BBOX;
-    console.log(`[osm/ingest] Starting OSM fetch for bbox=${bbox}`);
     const query = OVERPASS_QUERY.replaceAll("{{bbox}}", bbox);
 
-    console.log(`[osm/ingest] Sending Overpass query`);
     const response = await fetch(OVERPASS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -51,9 +47,7 @@ export const fetchAndStoreOsm = internalAction({
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Overpass API error: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Overpass API error: ${response.status} ${response.statusText}`);
     }
 
     const json = (await response.json()) as { elements: OverpassNode[] };
@@ -69,19 +63,13 @@ export const fetchAndStoreOsm = internalAction({
           : undefined,
       }));
 
-    console.log(`[osm/ingest] Received ${json.elements.length} elements, ${nodes.length} nodes after filtering`);
-
-    // Insert in batches to avoid mutation size limits
-    const numBatches = Math.ceil(nodes.length / BATCH_SIZE);
-    console.log(`[osm/ingest] Inserting ${nodes.length} nodes in ${numBatches} batches of ${BATCH_SIZE}`);
-    for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
-      const batch = nodes.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      console.log(`[osm/ingest] Inserting batch ${batchNum}/${numBatches} (${batch.length} nodes)`);
-      await ctx.runMutation(internal.osm.ingest.insertOsmStationsBatch, { nodes: batch });
+    for (let i = 0; i < nodes.length; i += INGEST_BATCH_SIZE) {
+      await ctx.runMutation(internal.z_osm.stations.insertOsmStationsBatch, {
+        nodes: nodes.slice(i, i + INGEST_BATCH_SIZE),
+      });
     }
 
-    console.log(`[osm/ingest] Fetch complete. Total nodes stored: ${nodes.length}`);
+    console.log(`[osm/stations] fetchAndStoreOsm: fetched and stored ${nodes.length} nodes`);
     return { total: nodes.length };
   },
 });
@@ -126,18 +114,89 @@ export const insertOsmStationsBatch = internalMutation({
       }
     }
 
-    console.log(`[osm/ingest] insertOsmStationsBatch: inserted=${inserted} updated=${updated}`);
+    console.log(`[osm/stations] insertOsmStationsBatch: total=${args.nodes.length} inserted=${inserted} updated=${updated}`);
   },
 });
 
-/** Public entry point — trigger from dashboard or CLI */
+// ---- Enrich ----
+
+const ENRICH_BATCH_SIZE = 500;
+
+function resolveStationType(
+  tags: Record<string, string>,
+  osmType: string,
+): "train" | "metro" | "rer" | "tram" | "light_rail" | "halt" | "unknown" {
+  if (osmType === "halt" || tags["railway"] === "halt") return "halt";
+  if (tags["railway"] === "tram_stop") return "tram";
+  const station = tags["station"];
+  if (station === "subway") return "metro";
+  if (station === "light_rail") return "light_rail";
+  if (station === "tram") return "tram";
+  if (tags["network"] === "RER" || tags["line"]?.startsWith("RER")) return "rer";
+  if (tags["railway"] === "station") return "train";
+  return "unknown";
+}
+
+export const enrichBatch = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const { page, continueCursor, isDone } = await ctx.db
+      .query("z_osm_stations")
+      .paginate({ cursor: args.cursor ?? null, numItems: ENRICH_BATCH_SIZE });
+
+    let matched = 0;
+
+    for (const osm of page) {
+      if (!osm.uic_ref) continue;
+
+      const station = await ctx.db
+        .query("stations")
+        .withIndex("by_uic_code", (q) => q.eq("uic_code", osm.uic_ref!))
+        .unique();
+
+      if (!station) continue;
+
+      const tags = osm.tags as Record<string, string>;
+
+      await ctx.db.patch(station._id, {
+        station_type: resolveStationType(tags, osm.osm_type),
+        metadata: {
+          ...station.metadata,
+          osm: { id: osm.osm_id, type: osm.osm_type, tags },
+        },
+      });
+
+      matched++;
+    }
+
+    console.log(`[osm/stations] enrichBatch: processed=${page.length} matched=${matched} isDone=${isDone}`);
+
+    if (!isDone) {
+      await ctx.scheduler.runAfter(0, internal.z_osm.stations.enrichBatch, {
+        cursor: continueCursor,
+      });
+    }
+
+    return { processed: page.length, matched, isDone };
+  },
+});
+
+// ---- Public entry points ----
+
 export const ingestOsmStations = mutation({
   args: { bbox: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    console.log(`[osm/ingest] ingestOsmStations triggered, bbox=${args.bbox ?? "default (France)"}`);
-    await ctx.scheduler.runAfter(0, internal.osm.ingest.fetchAndStoreOsm, {
+    await ctx.scheduler.runAfter(0, internal.z_osm.stations.fetchAndStoreOsm, {
       bbox: args.bbox,
     });
     return "OSM ingest started";
+  },
+});
+
+export const enrichStationsWithOsm = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.scheduler.runAfter(0, internal.z_osm.stations.enrichBatch, {});
+    return "OSM enrichment started";
   },
 });

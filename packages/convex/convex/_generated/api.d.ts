@@ -8,16 +8,13 @@
  * @module
  */
 
-import type * as osm_enrich from "../osm/enrich.js";
-import type * as osm_ingest from "../osm/ingest.js";
 import type * as railways_queries from "../railways/queries.js";
 import type * as railways_transform from "../railways/transform.js";
-import type * as sncf_ingest from "../sncf/ingest.js";
-import type * as sncf_ingest_railways from "../sncf/ingest_railways.js";
-import type * as sncf_migrate from "../sncf/migrate.js";
-import type * as sncf_migrate_railways from "../sncf/migrate_railways.js";
 import type * as stations_queries from "../stations/queries.js";
 import type * as stations_transform from "../stations/transform.js";
+import type * as z_osm_stations from "../z_osm/stations.js";
+import type * as z_sncf_railways from "../z_sncf/railways.js";
+import type * as z_sncf_stations from "../z_sncf/stations.js";
 
 import type {
   ApiFromModules,
@@ -26,16 +23,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "osm/enrich": typeof osm_enrich;
-  "osm/ingest": typeof osm_ingest;
   "railways/queries": typeof railways_queries;
   "railways/transform": typeof railways_transform;
-  "sncf/ingest": typeof sncf_ingest;
-  "sncf/ingest_railways": typeof sncf_ingest_railways;
-  "sncf/migrate": typeof sncf_migrate;
-  "sncf/migrate_railways": typeof sncf_migrate_railways;
   "stations/queries": typeof stations_queries;
   "stations/transform": typeof stations_transform;
+  "z_osm/stations": typeof z_osm_stations;
+  "z_sncf/railways": typeof z_sncf_railways;
+  "z_sncf/stations": typeof z_sncf_stations;
 }>;
 
 /**
