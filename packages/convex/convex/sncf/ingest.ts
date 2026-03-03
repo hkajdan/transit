@@ -35,14 +35,16 @@ type SncfRecord = {
   };
 };
 
-export const fetchAndStoreSncf = internalAction({
+export const fetchAndStoreSncfStations = internalAction({
   args: {},
   handler: async (ctx) => {
+    console.log("[sncf/ingest] Starting SNCF stations fetch");
     let offset = 0;
     let total = 0;
 
     while (true) {
       const url = `${SNCF_API_URL}?limit=${PAGE_SIZE}&offset=${offset}`;
+      console.log(`[sncf/ingest] Fetching page offset=${offset} (url: ${url})`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -51,28 +53,40 @@ export const fetchAndStoreSncf = internalAction({
 
       const json = (await response.json()) as { results: SncfRecord[] };
       const records = json.results;
+      console.log(`[sncf/ingest] Received ${records.length} records at offset=${offset}`);
 
-      if (records.length === 0) break;
+      if (records.length === 0) {
+        console.log("[sncf/ingest] No more records, stopping fetch loop");
+        break;
+      }
 
-      await ctx.runMutation(internal.sncf.ingest.insertBatch, { records });
+      await ctx.runMutation(internal.sncf.ingest.insertSncfStationsBatch, { records });
+      console.log(`[sncf/ingest] Inserted batch of ${records.length} stations`);
 
       total += records.length;
       offset += records.length;
 
-      if (records.length < PAGE_SIZE) break;
+      if (records.length < PAGE_SIZE) {
+        console.log("[sncf/ingest] Last page reached, stopping fetch loop");
+        break;
+      }
     }
 
-    await ctx.runMutation(internal.sncf.migrate.migrateBatch, {});
+    console.log(`[sncf/ingest] Fetch complete. Total stations stored: ${total}. Scheduling migration.`);
+    await ctx.runMutation(internal.sncf.migrate.migrateStationsBatch, {});
 
     return { total };
   },
 });
 
-export const insertBatch = internalMutation({
+export const insertSncfStationsBatch = internalMutation({
   args: {
     records: v.array(v.any()),
   },
   handler: async (ctx, args) => {
+    let inserted = 0;
+    let updated = 0;
+
     for (const record of args.records as SncfRecord[]) {
       const existing = await ctx.db
         .query("z_sncf_stations")
@@ -102,10 +116,14 @@ export const insertBatch = internalMutation({
 
       if (existing) {
         await ctx.db.replace(existing._id, row);
+        updated++;
       } else {
         await ctx.db.insert("z_sncf_stations", row);
+        inserted++;
       }
     }
+
+    console.log(`[sncf/ingest] insertSncfStationsBatch: inserted=${inserted} updated=${updated}`);
   },
 });
 
@@ -113,7 +131,8 @@ export const insertBatch = internalMutation({
 export const ingestSncfStations = mutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.sncf.ingest.fetchAndStoreSncf, {});
+    console.log("[sncf/ingest] ingestSncfStations triggered, scheduling fetchAndStoreSncfStations");
+    await ctx.scheduler.runAfter(0, internal.sncf.ingest.fetchAndStoreSncfStations, {});
     return "SNCF ingest started";
   },
 });

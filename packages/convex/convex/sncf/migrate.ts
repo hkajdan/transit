@@ -39,14 +39,21 @@ function normalize(
   };
 }
 
-export const migrateBatch = internalMutation({
+export const migrateStationsBatch = internalMutation({
   args: {
     cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    console.log(`[sncf/migrate] migrateStationsBatch starting, cursor=${args.cursor ?? "null"}`);
+
     const { page, continueCursor, isDone } = await ctx.db
       .query("z_sncf_stations")
       .paginate({ cursor: args.cursor ?? null, numItems: BATCH_SIZE });
+
+    console.log(`[sncf/migrate] Processing page of ${page.length} raw stations (isDone=${isDone})`);
+
+    let inserted = 0;
+    let updated = 0;
 
     for (const raw of page) {
       const normalized = normalize(raw);
@@ -57,18 +64,25 @@ export const migrateBatch = internalMutation({
 
       if (existing) {
         await ctx.db.replace(existing._id, normalized);
+        updated++;
       } else {
         await ctx.db.insert("stations", normalized);
+        inserted++;
       }
     }
 
+    console.log(`[sncf/migrate] Batch done: inserted=${inserted} updated=${updated} isDone=${isDone}`);
+
     if (!isDone) {
-      await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateBatch, {
+      console.log(`[sncf/migrate] Scheduling next batch with cursor=${continueCursor}`);
+      await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateStationsBatch, {
         cursor: continueCursor,
       });
+    } else {
+      console.log("[sncf/migrate] All stations migrated.");
     }
 
-    return { processed: page.length, isDone };
+    return { processed: page.length, inserted, updated, isDone };
   },
 });
 
@@ -76,7 +90,8 @@ export const migrateBatch = internalMutation({
 export const migrateSncfStations = mutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateBatch, {});
+    console.log("[sncf/migrate] migrateSncfStations triggered, scheduling migrateStationsBatch");
+    await ctx.scheduler.runAfter(0, internal.sncf.migrate.migrateStationsBatch, {});
     return "Migration started";
   },
 });

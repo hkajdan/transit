@@ -38,12 +38,19 @@ function normalize(
   };
 }
 
-export const migrateBatch = internalMutation({
+export const migrateRailwaysBatch = internalMutation({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    console.log(`[sncf/migrate_railways] migrateRailwaysBatch starting, cursor=${args.cursor ?? "null"}`);
+
     const { page, continueCursor, isDone } = await ctx.db
       .query("z_sncf_railways")
       .paginate({ cursor: args.cursor ?? null, numItems: BATCH_SIZE });
+
+    console.log(`[sncf/migrate_railways] Processing page of ${page.length} raw railways (isDone=${isDone})`);
+
+    let inserted = 0;
+    let updated = 0;
 
     for (const raw of page) {
       const normalized = normalize(raw);
@@ -57,25 +64,33 @@ export const migrateBatch = internalMutation({
 
       if (existing) {
         await ctx.db.replace(existing._id, normalized);
+        updated++;
       } else {
         await ctx.db.insert("railways", normalized);
+        inserted++;
       }
     }
 
+    console.log(`[sncf/migrate_railways] Batch done: inserted=${inserted} updated=${updated} isDone=${isDone}`);
+
     if (!isDone) {
-      await ctx.scheduler.runAfter(0, internal.sncf.migrate_railways.migrateBatch, {
+      console.log(`[sncf/migrate_railways] Scheduling next batch with cursor=${continueCursor}`);
+      await ctx.scheduler.runAfter(0, internal.sncf.migrate_railways.migrateRailwaysBatch, {
         cursor: continueCursor,
       });
+    } else {
+      console.log("[sncf/migrate_railways] All railways migrated.");
     }
 
-    return { processed: page.length, isDone };
+    return { processed: page.length, inserted, updated, isDone };
   },
 });
 
 export const migrateSncfRailways = mutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.sncf.migrate_railways.migrateBatch, {});
+    console.log("[sncf/migrate_railways] migrateSncfRailways triggered, scheduling migrateRailwaysBatch");
+    await ctx.scheduler.runAfter(0, internal.sncf.migrate_railways.migrateRailwaysBatch, {});
     return "SNCF railways migration started";
   },
 });

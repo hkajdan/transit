@@ -41,10 +41,12 @@ async function fetchAllScalar<T>(dataset: string, fields: string[]): Promise<T[]
   const select = fields.join(",");
   while (true) {
     const url = `${BASE}/${dataset}/records?limit=${PAGE_SIZE}&offset=${offset}&select=${select}`;
+    console.log(`[sncf/ingest_railways] fetchAllScalar dataset=${dataset} offset=${offset}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`SNCF API error on ${dataset}: ${res.status}`);
     const json = (await res.json()) as { results: T[] };
     results.push(...json.results);
+    console.log(`[sncf/ingest_railways] fetchAllScalar dataset=${dataset} got ${json.results.length} records (total so far: ${results.length})`);
     if (json.results.length < PAGE_SIZE) break;
     offset += json.results.length;
   }
@@ -55,26 +57,31 @@ async function fetchAllScalar<T>(dataset: string, fields: string[]): Promise<T[]
 async function fetchFormesPage(offset: number): Promise<{ results: FormeRecord[]; done: boolean }> {
   const select = "code_ligne,rg_troncon,mnemo,pk_debut_r,pk_fin_r,geo_shape";
   const url = `${BASE}/formes-des-lignes-du-rfn/records?limit=${PAGE_SIZE}&offset=${offset}&select=${select}`;
+  console.log(`[sncf/ingest_railways] fetchFormesPage offset=${offset}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`SNCF API error on formes: ${res.status}`);
   const json = (await res.json()) as { results: FormeRecord[] };
+  console.log(`[sncf/ingest_railways] fetchFormesPage offset=${offset} got ${json.results.length} records`);
   return { results: json.results, done: json.results.length < PAGE_SIZE };
 }
 
 // --- Main action ---
 
-export const fetchAndStoreRailways = internalAction({
+export const fetchAndStoreSncfRailways = internalAction({
   args: {},
   handler: async (ctx) => {
+    console.log("[sncf/ingest_railways] Starting SNCF railways fetch");
     const key = (code: string, rg: number) => `${code}|${rg}`;
 
     // Fetch lookup tables with scalar fields only (no geo) — small enough to hold in memory
+    console.log("[sncf/ingest_railways] Fetching lookup tables (statuts, types, vitesses, caracs) in parallel");
     const [statuts, types, vitesses, caracs] = await Promise.all([
       fetchAllScalar<StatutLookup>("lignes-par-statut", ["code_ligne", "rg_troncon", "lib_ligne", "statut"]),
       fetchAllScalar<TypeLookup>("lignes-par-type", ["code_ligne", "rg_troncon", "lib_ligne", "type_ligne"]),
       fetchAllScalar<VitesseLookup>("vitesse-maximale-nominale-sur-ligne", ["code_ligne", "rg_troncon", "v_max"]),
       fetchAllScalar<CaracLookup>("caracteristique-des-voies-et-declivite", ["code_ligne", "type", "valeur", "pkd", "pkf"]),
     ]);
+    console.log(`[sncf/ingest_railways] Lookup tables loaded: statuts=${statuts.length} types=${types.length} vitesses=${vitesses.length} caracs=${caracs.length}`);
 
     const statutMap = new Map(statuts.map((r) => [key(r.code_ligne, r.rg_troncon), r]));
     const typeMap = new Map(types.map((r) => [key(r.code_ligne, r.rg_troncon), r]));
@@ -87,6 +94,7 @@ export const fetchAndStoreRailways = internalAction({
       arr.push(c);
       caracMap.set(c.code_ligne, arr);
     }
+    console.log(`[sncf/ingest_railways] caracMap built for ${caracMap.size} lines`);
 
     // Process formes page by page — never accumulate geo data in memory
     let offset = 0;
@@ -114,19 +122,28 @@ export const fetchAndStoreRailways = internalAction({
         };
       });
 
-      await ctx.runMutation(internal.sncf.ingest_railways.insertBatch, { records: batch });
+      console.log(`[sncf/ingest_railways] Inserting batch of ${batch.length} railways at offset=${offset}`);
+      await ctx.runMutation(internal.sncf.ingest_railways.insertSncfRailwaysBatch, { records: batch });
       total += formes.length;
       offset += formes.length;
-      if (done) break;
+
+      if (done) {
+        console.log(`[sncf/ingest_railways] Last page reached, stopping fetch loop`);
+        break;
+      }
     }
 
+    console.log(`[sncf/ingest_railways] Fetch complete. Total railways stored: ${total}`);
     return { total };
   },
 });
 
-export const insertBatch = internalMutation({
+export const insertSncfRailwaysBatch = internalMutation({
   args: { records: v.array(v.any()) },
   handler: async (ctx, args) => {
+    let inserted = 0;
+    let updated = 0;
+
     for (const record of args.records as Array<{
       code_ligne: string;
       rg_troncon: number;
@@ -149,17 +166,22 @@ export const insertBatch = internalMutation({
 
       if (existing) {
         await ctx.db.replace(existing._id, record);
+        updated++;
       } else {
         await ctx.db.insert("z_sncf_railways", record);
+        inserted++;
       }
     }
+
+    console.log(`[sncf/ingest_railways] insertSncfRailwaysBatch: inserted=${inserted} updated=${updated}`);
   },
 });
 
 export const ingestSncfRailways = mutation({
   args: {},
   handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.sncf.ingest_railways.fetchAndStoreRailways, {});
+    console.log("[sncf/ingest_railways] ingestSncfRailways triggered, scheduling fetchAndStoreSncfRailways");
+    await ctx.scheduler.runAfter(0, internal.sncf.ingest_railways.fetchAndStoreSncfRailways, {});
     return "SNCF railways ingest started";
   },
 });

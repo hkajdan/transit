@@ -40,8 +40,10 @@ export const fetchAndStoreOsm = internalAction({
   args: { bbox: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const bbox = args.bbox ?? FRANCE_BBOX;
+    console.log(`[osm/ingest] Starting OSM fetch for bbox=${bbox}`);
     const query = OVERPASS_QUERY.replaceAll("{{bbox}}", bbox);
 
+    console.log(`[osm/ingest] Sending Overpass query`);
     const response = await fetch(OVERPASS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -67,17 +69,24 @@ export const fetchAndStoreOsm = internalAction({
           : undefined,
       }));
 
+    console.log(`[osm/ingest] Received ${json.elements.length} elements, ${nodes.length} nodes after filtering`);
+
     // Insert in batches to avoid mutation size limits
+    const numBatches = Math.ceil(nodes.length / BATCH_SIZE);
+    console.log(`[osm/ingest] Inserting ${nodes.length} nodes in ${numBatches} batches of ${BATCH_SIZE}`);
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE);
-      await ctx.runMutation(internal.osm.ingest.insertBatch, { nodes: batch });
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      console.log(`[osm/ingest] Inserting batch ${batchNum}/${numBatches} (${batch.length} nodes)`);
+      await ctx.runMutation(internal.osm.ingest.insertOsmStationsBatch, { nodes: batch });
     }
 
+    console.log(`[osm/ingest] Fetch complete. Total nodes stored: ${nodes.length}`);
     return { total: nodes.length };
   },
 });
 
-export const insertBatch = internalMutation({
+export const insertOsmStationsBatch = internalMutation({
   args: {
     nodes: v.array(
       v.object({
@@ -90,6 +99,9 @@ export const insertBatch = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    let inserted = 0;
+    let updated = 0;
+
     for (const node of args.nodes) {
       const existing = await ctx.db
         .query("z_osm_stations")
@@ -107,10 +119,14 @@ export const insertBatch = internalMutation({
 
       if (existing) {
         await ctx.db.replace(existing._id, row);
+        updated++;
       } else {
         await ctx.db.insert("z_osm_stations", row);
+        inserted++;
       }
     }
+
+    console.log(`[osm/ingest] insertOsmStationsBatch: inserted=${inserted} updated=${updated}`);
   },
 });
 
@@ -118,6 +134,7 @@ export const insertBatch = internalMutation({
 export const ingestOsmStations = mutation({
   args: { bbox: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    console.log(`[osm/ingest] ingestOsmStations triggered, bbox=${args.bbox ?? "default (France)"}`);
     await ctx.scheduler.runAfter(0, internal.osm.ingest.fetchAndStoreOsm, {
       bbox: args.bbox,
     });
