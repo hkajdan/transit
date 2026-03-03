@@ -6,7 +6,9 @@ import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
-  const convex = new ConvexReactClient("http://localhost:3210");
+  const convex = new ConvexReactClient(
+    import.meta.env.VITE_CONVEX_SELF_HOSTED_URL,
+  );
   const convexQueryClient = new ConvexQueryClient(convex);
   const queryClient = new QueryClient({
     defaultOptions: {
